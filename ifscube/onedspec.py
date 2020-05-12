@@ -75,6 +75,7 @@ class Spectrum:
         self.r = None
         self.resultspec = None
         self.valid_pixels = None
+        self.fit_dispersion = None
 
         self.ppxf_sol = np.ndarray([])
 
@@ -239,6 +240,14 @@ class Spectrum:
         hdu = fits.ImageHDU(data=self.em_model, header=hdr)
         hdu.name = 'SOLUTION'
         h.append(hdu)
+
+        if self.fit_dispersion is not None:
+            hdr['object'] = 'dispersion'
+            hdr['function'] = (function, 'Fitted function')
+            hdr['nfunc'] = (int(total_pars / self.npars), 'Number of functions')
+            hdu = fits.ImageHDU(data=self.fit_dispersion, header=hdr)
+            hdu.name = 'DISP'
+            h.append(hdu)
 
         # Integrated flux extensions
         hdr['object'] = 'flux_model'
@@ -445,7 +454,8 @@ class Spectrum:
                 minopts=None, copts=None, weights=None, verbose=False, fit_continuum=False, component_names=None,
                 overwrite=False, eqw_opts=None, trivial=False, suffix=None, optimize_fit=False,
                 optimization_window=10.0, guess_parameters=False, test_jacobian=False, good_minfraction=.8,
-                fixed: bool = False, fixed_components: str = None, continuum_line_weight: float = 0.0):
+                fixed: bool = False, fixed_components: str = None, continuum_line_weight: float = 0.0,
+                monte_carlo: int = 0):
         """
         Fits a spectral features.
 
@@ -661,6 +671,7 @@ class Spectrum:
                             up_lambda = j + (3.0 * sigmas[i])
                             cw[(wl > low_lambda) & (wl < up_lambda)] = continuum_line_weight
                         return cw
+
                     new_copts.update({'weights': continuum_weights(self.sigma_lambda(p0[2::npars_pc], feature_wl))})
 
                 pcont: Union[Iterable, Callable] = spectools.continuum(wl, data - stellar, **new_copts)
@@ -733,9 +744,9 @@ class Spectrum:
         #
 
         if fixed_components is None:
-            def res(x):
+            def res(x, obs):
                 m = fit_func(wl[opt_mask], feature_wl, x)
-                a = w[opt_mask] * (s[opt_mask] - m) ** 2
+                a = w[opt_mask] * (obs[opt_mask] - m) ** 2
                 b = a / v[opt_mask]
                 rms = np.sqrt(np.sum(b))
                 return rms
@@ -749,7 +760,21 @@ class Spectrum:
         if constraints is None:
             constraints = []
 
-        r = minimize(res, x0=p0, method=min_method, bounds=sbounds, constraints=constraints, options=minopts)
+        r = minimize(res, x0=p0, args=(s,), method=min_method, bounds=sbounds, constraints=constraints, options=minopts)
+
+        if monte_carlo > 0:
+            monte_carlo_counter = 0
+            self.fit_dispersion = np.zeros_like(r.x)
+            old_s = deepcopy(s)
+            x_matrix = np.zeros((monte_carlo, r.x.size))
+            while monte_carlo_counter < monte_carlo:
+                new_s = np.random.normal(s, np.sqrt(v))
+                new_r = minimize(res, x0=r.x, args=(new_s,), method=min_method, bounds=sbounds, constraints=constraints,
+                                 options=minopts)
+                x_matrix[monte_carlo_counter] = new_r.x
+                monte_carlo_counter += 1
+            r.x = x_matrix.mean(axis=0)
+            self.fit_dispersion = x_matrix.std(axis=0)
 
         # Perform the fit a second time with the RMS as the flux
         # initial guess. This was added after a number of fits returned
@@ -798,6 +823,8 @@ class Spectrum:
         p0[::npars_pc] *= scale_factor
         p = np.append(r['x'], red_chi2)
         p[0:-1:npars_pc] *= scale_factor
+        if self.fit_dispersion is not None:
+            self.fit_dispersion[:-1] *= scale_factor
 
         self.resultspec = self.fitstellar + self.fitcont + fit_func(self.fitwl, feature_wl, r['x']) * scale_factor
 
@@ -1110,6 +1137,10 @@ class Spectrum:
         ax.plot(wl, star)
         ax.plot(wl, c + star)
         ax.plot(wl, c + star + f(wl, rest_wl, pp))
+
+        if self.fit_dispersion is not None:
+            ax.plot(wl, c + star + f(wl, rest_wl, pp + 3 * self.fit_dispersion), 'C6')
+            ax.plot(wl, c + star + f(wl, rest_wl, pp - 3 * self.fit_dispersion), 'C6')
 
         npars = self.npars
         parnames = self.parnames
