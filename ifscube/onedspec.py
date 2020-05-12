@@ -744,9 +744,9 @@ class Spectrum:
         #
 
         if fixed_components is None:
-            def res(x, obs):
+            def res(x):
                 m = fit_func(wl[opt_mask], feature_wl, x)
-                a = w[opt_mask] * (obs[opt_mask] - m) ** 2
+                a = w[opt_mask] * (s[opt_mask] - m) ** 2
                 b = a / v[opt_mask]
                 rms = np.sqrt(np.sum(b))
                 return rms
@@ -760,7 +760,7 @@ class Spectrum:
         if constraints is None:
             constraints = []
 
-        r = minimize(res, x0=p0, args=(s,), method=min_method, bounds=sbounds, constraints=constraints, options=minopts)
+        r = minimize(res, x0=p0, method=min_method, bounds=sbounds, constraints=constraints, options=minopts)
 
         if monte_carlo > 0:
             monte_carlo_counter = 0
@@ -768,14 +768,14 @@ class Spectrum:
             old_s = deepcopy(s)
             x_matrix = np.zeros((monte_carlo, r.x.size))
             while monte_carlo_counter < monte_carlo:
-                new_s = np.random.normal(s, np.sqrt(v))
-                new_r = minimize(res, x0=r.x, args=(new_s,), method=min_method, bounds=sbounds, constraints=constraints,
+                s = np.random.normal(s, np.sqrt(v))
+                new_r = minimize(res, x0=p0, method=min_method, bounds=sbounds, constraints=constraints,
                                  options=minopts)
                 x_matrix[monte_carlo_counter] = new_r.x
                 monte_carlo_counter += 1
             r.x = x_matrix.mean(axis=0)
             self.fit_dispersion = x_matrix.std(axis=0)
-
+            s = old_s
         # Perform the fit a second time with the RMS as the flux
         # initial guess. This was added after a number of fits returned
         # high flux values even when no lines were present.
