@@ -768,7 +768,7 @@ class Spectrum:
             old_s = deepcopy(s)
             x_matrix = np.zeros((monte_carlo, r.x.size))
             while monte_carlo_counter < monte_carlo:
-                s = np.random.normal(s, np.sqrt(v))
+                s = np.random.normal(old_s, np.sqrt(v))
                 new_r = minimize(res, x0=p0, method=min_method, bounds=sbounds, constraints=constraints,
                                  options=minopts)
                 x_matrix[monte_carlo_counter] = new_r.x
