@@ -820,11 +820,12 @@ class Spectrum:
 
         self.fit_status = r.status
 
-        p0[::npars_pc] *= scale_factor
+        amplitude_loc = slice(0, None, npars_pc)
+        p0[amplitude_loc] *= scale_factor
         p = np.append(r['x'], red_chi2)
-        p[0:-1:npars_pc] *= scale_factor
+        p[amplitude_loc] *= scale_factor
         if self.fit_dispersion is not None:
-            self.fit_dispersion[:-1] *= scale_factor
+            self.fit_dispersion[amplitude_loc] *= scale_factor
 
         self.resultspec = self.fitstellar + self.fitcont + fit_func(self.fitwl, feature_wl, r['x']) * scale_factor
 
