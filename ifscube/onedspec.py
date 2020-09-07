@@ -76,6 +76,7 @@ class Spectrum:
         self.resultspec = None
         self.valid_pixels = None
         self.fit_dispersion = None
+        self.linear_wl = None
 
         self.ppxf_sol = np.ndarray([])
 
@@ -123,6 +124,7 @@ class Spectrum:
             if wcs_axis is not None:
                 wcs_axis = [wcs_axis]
             self.wcs = wcs.WCS(self.header_data, naxis=wcs_axis)
+            self.linear_wl = True
 
             self._accessory_data(hdu, variance, flags, stellar)
 
@@ -200,12 +202,23 @@ class Spectrum:
         hdu.name = 'PRIMARY'
         h.append(hdu)
 
-        # Creates the fitted spectrum extension
+        # Creates header
         hdr = fits.Header()
         hdr['object'] = ('spectrum', 'Data in this extension')
         hdr['CRPIX1'] = (1, 'Reference pixel for wavelength')
         hdr['CRVAL1'] = (self.fitwl[0], 'Reference value for wavelength')
         hdr['CD1_1'] = (np.average(np.diff(self.fitwl)), 'CD1_1')
+
+        # Creates the fitted wl extension.
+        if not self.linear_wl:
+            hdr['object'] = 'fitwl'
+            hdr['CD1_1'] = -1
+            hdu = fits.ImageHDU(data=self.fitwl, header=hdr)
+            hdu.name = 'FITWL'
+            h.append(hdu)
+
+        # Creates the fitted spectrum extension
+        hdr['object'] = ('spectrum', 'Data in this extension')
         hdu = fits.ImageHDU(data=self.fitspec, header=hdr)
         hdu.name = 'FITSPEC'
         h.append(hdu)
@@ -289,11 +302,11 @@ class Spectrum:
                                     stellar=None, header=None, header_data=None,
                                     WCS=None, wcs_axis=None):
 
-
         def shmess(name):
             s = '{:s} spectrum must have the same shape of the spectrum itself'
             return s.format(name)
 
+        self.linear_wl = False
 
         # Header
         self.header = header
