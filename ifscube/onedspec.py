@@ -1136,8 +1136,11 @@ class Spectrum:
         self.eqw_model = h['EQW_M'].data
         self.eqw_direct = h['EQW_D'].data
 
-        fitwcs = wcs.WCS(h['FITSPEC'].header)
-        self.fitwl = fitwcs.wcs_pix2world(np.arange(len(self.fitspec)), 0)[0]
+        try:
+            self.fitwl = h['FITWL'].data
+        except KeyError:
+            fitwcs = wcs.WCS(h['FITSPEC'].header)
+            self.fitwl = fitwcs.wcs_pix2world(np.arange(len(self.fitspec)), 0)[0]
 
         self.feature_wl = np.array([
             float(i[1]) for i in h['fitconfig'].data
