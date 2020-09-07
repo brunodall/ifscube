@@ -285,6 +285,68 @@ class Spectrum:
 
         h.writeto(out_image, overwrite=args['overwrite'])
 
+    def _load_nonlinear_wl_spectrum(self, wl, data, redshift=0, var=None, flags=None, 
+                                    stellar=None, header=None, header_data=None,
+                                    WCS=None, wcs_axis=None):
+
+
+        def shmess(name):
+            s = '{:s} spectrum must have the same shape of the spectrum itself'
+            return s.format(name)
+
+
+        # Header
+        self.header = header
+        if header_data is None:
+            self.header_data = header
+
+        # Redshift, wl
+        self.redshift = redshift
+        self.wl = wl
+        self.rest_wavelength = wl / (1. + redshift)
+
+        # SCI data
+        self.data = data
+
+        # Variance
+        if var is not None:
+            assert var.shape == self.data.shape, shmess('VARIANCE')
+            self.variance = var
+        else:
+            self.variance = np.ones_like(data)
+
+        # Stellar
+        if stellar is not None:
+            assert stellar.shape == self.data.shape, shmess('STELLAR')
+            self.stellar = self.stellar
+        else:
+            self.stellar = np.zeros_like(data)
+
+        # Flags
+        if flags is not None:
+            assert flags.shape == self.data.shape, shmess('FLAGS')
+            self.flags = flags
+        else:
+            #self.flags = np.zeros_like(self.data, dtype=bool)
+            #self.flags += (self.data == 0)
+            self.flags = (np.isnan(self.data) + np.isinf(self.data) 
+                          + np.isnan(self.variance) + np.isinf(self.variance)
+                          + np.isnan(self.stellar) + np.isinf(self.stellar))
+
+
+        # FIXME: Variables bellow are based on a linear wavelength array
+        self.delta_lambda = np.nanmean(wl)
+
+        # WCS
+        if WCS is not None:
+            self.wcs = WCS
+        else:
+            if wcs_axis is not None:
+                wcs_axis = [wcs_axis]
+
+            self.wcs = wcs.WCS(header_data, naxis=wcs_axis)
+
+
     @staticmethod
     def _within_bounds(x, bounds):
 
