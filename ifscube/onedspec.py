@@ -191,7 +191,7 @@ class Spectrum:
 
         hdr = self.header
         try:
-            hdr['REDSHIFT'] = self.redshift
+            hdr['REDSHIFT']
         except KeyError:
             hdr['REDSHIFT'] = (self.redshift,
                                'Redshift used in IFSCUBE')
@@ -298,20 +298,25 @@ class Spectrum:
 
         h.writeto(out_image, overwrite=args['overwrite'])
 
-    def _load_nonlinear_wl_spectrum(self, wl, data, redshift=0, var=None, flags=None, 
-                                    stellar=None, header=None, header_data=None,
-                                    WCS=None, wcs_axis=None):
+    def _load_nonlinear_wl(self, wl, data, redshift=0, variance=None,
+                           flags=None, stellar=None, header=None,
+                           header_data=None, WCS=None, wcs_axis=None):
 
         def shmess(name):
             s = '{:s} spectrum must have the same shape of the spectrum itself'
             return s.format(name)
 
+        # bool
         self.linear_wl = False
 
         # Header
-        self.header = header
+        if header is not None:
+            self.header = header
+        else:
+            self.header = fits.Header()
+
         if header_data is None:
-            self.header_data = header
+            self.header_data = deepcopy(header)
 
         # Redshift, wl
         self.redshift = redshift
@@ -322,16 +327,16 @@ class Spectrum:
         self.data = data
 
         # Variance
-        if var is not None:
-            assert var.shape == self.data.shape, shmess('VARIANCE')
-            self.variance = var
+        if variance is not None:
+            assert variance.shape == self.data.shape, shmess('VARIANCE')
+            self.variance = variance
         else:
             self.variance = np.ones_like(data)
 
         # Stellar
         if stellar is not None:
             assert stellar.shape == self.data.shape, shmess('STELLAR')
-            self.stellar = self.stellar
+            self.stellar = stellar
         else:
             self.stellar = np.zeros_like(data)
 
