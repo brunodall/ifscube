@@ -64,6 +64,7 @@ class Cube:
         self.spatial_mask = None
         self.spec_indices = None
         self.variance = None
+        self.linear_wl = None
 
         if len(args) > 0:
             self._load(*args, **kwargs)
@@ -152,6 +153,7 @@ class Cube:
             self.header = hdu[primary].header
             self.header_data = hdu[scidata].header
             self.wcs = wcs.WCS(self.header_data)
+            self.linear_wl = True
 
             self._accessory_data(hdu, variance, flags, stellar, weights, spatial_mask)
             self.noise_cube = np.sqrt(self.variance)
@@ -354,6 +356,104 @@ class Cube:
 
         h.writeto(outimage, overwrite=args['overwrite'])
         original_cube.close()
+
+    def _load_nonlinear_wl(self, wl, data, redshift=0, variance=None, 
+                          flags=None, stellar=None, header=None,
+                          header_data=None, WCS=None, vortab=None,
+                          spatial_mask=None, nan_spaxels='all'):
+
+        def shmess(name):
+            s = '{:s} spectrum must have the same shape of the spectrum itself'
+            return s.format(name)
+
+        # bool
+        self.linear_wl = False
+
+        # Header
+        if header is not None:
+            self.header = header
+        else:
+            self.header = fits.Header()
+
+        if header_data is None:
+            self.header_data = deepcopy(self.header)
+
+        # Redshift, wl
+        self.redshift = redshift
+        self.wl = wl
+        self.rest_wavelength = wl / (1. + redshift)
+
+        # SCI data
+        self.data = data
+
+        # Variance
+        if variance is not None:
+            assert variance.shape == self.data.shape, shmess('VARIANCE')
+            self.variance = variance
+        else:
+            self.variance = np.ones_like(data)
+        self.noise_cube = np.sqrt(self.variance)
+
+        # Stellar
+        if stellar is not None:
+            assert stellar.shape == self.data.shape, shmess('STELLAR')
+            self.stellar = stellar
+        else:
+            self.stellar = np.zeros_like(data)
+
+        # Weigths
+        if stellar is not None:
+            assert weights.shape == self.data.shape, shmess('WEIGTHS')
+            self.weights = self.weights
+        else:
+            self.weights = np.ones_like(data)
+
+        # Flags
+        if flags is not None:
+            assert flags.shape == self.data.shape, shmess('FLAGS')
+            self.flags = flags
+        else:
+            self.flags = (np.isnan(self.data) + np.isinf(self.data) 
+                          + np.isnan(self.variance) + np.isinf(self.variance)
+                          + np.isnan(self.stellar) + np.isinf(self.stellar))
+
+        # Spatial mask
+        if spatial_mask is not None:
+            assert spatial_mask.shape == self.data.shape[1:], \
+                'Spatial mask must match the last two dimensions of the data cube.'
+            self.spatial_mask = spatial_mask.astype('bool')
+        else:
+            self.spatial_mask = np.zeros(self.data.shape[1:]).astype('bool')
+
+        # nan spaxels
+        if nan_spaxels == 'all':
+            self.nan_mask = (np.isnan(self.data).all(axis=0)
+                             + np.isnan(self.stellar).all(axis=0))
+        elif nan_spaxels == 'any':
+            self.nan_mask = (np.isnan(self.data).any(axis=0)
+                             + np.isnan(self.stellar).any(axis=0))
+        else:
+            self.nan_mask = np.zeros(self.data.shape[1:]).astype('bool')
+
+        self.spatial_mask += self.nan_mask
+        self.flags += self.spatial_mask[np.newaxis, :, :]
+
+        # Voronoi table
+        if vortab is not None:
+            self.voronoi_tab = vortab
+            self.binned = True
+        else:
+            self.binned = False
+
+        # WCS
+        if WCS is not None:
+            self.wcs = WCS
+        else:
+            self.wcs = wcs.WCS(header_data, naxis=3)
+
+        self._set_spec_indices()
+        self.cont = None
+        self.fitsfile = 'default.fits'
 
     def _write_eqw(self, eqw, args):
 
