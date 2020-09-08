@@ -237,7 +237,7 @@ class Cube:
 
         hdr = deepcopy(self.header_data)
         try:
-            hdr['REDSHIFT'] = self.redshift
+            hdr['REDSHIFT']
         except KeyError:
             hdr['REDSHIFT'] = (self.redshift, 'Redshift used in GMOSDC')
 
@@ -247,12 +247,22 @@ class Cube:
         hdu.name = 'PRIMARY'
         h.append(hdu)
 
-        # Creates the fitted spectrum extension
+        # Creates header
         hdr = fits.Header()
-        hdr['object'] = ('spectrum', 'Data in this extension')
         hdr['CRPIX3'] = (1, 'Reference pixel for wavelength')
         hdr['CRVAL3'] = (self.fit_wavelength[0], 'Reference value for wavelength')
         hdr['CD3_3'] = (np.average(np.diff(self.fit_wavelength)), 'CD3_3')
+
+        # Creates the fitted wl extension.
+        if not self.linear_wl:
+            hdr['object'] = 'fitwl'
+            hdr['CD3_3'] = -1
+            hdu = fits.ImageHDU(data=self.fit_wavelength, header=hdr)
+            hdu.name = 'FITWL'
+            h.append(hdu)
+
+        # Creates the fitted spectrum extension
+        hdr['object'] = ('spectrum', 'Data in this extension')
         hdu = fits.ImageHDU(data=self.fitspec, header=hdr)
         hdu.name = 'FITSPEC'
         h.append(hdu)
@@ -349,13 +359,17 @@ class Cube:
         hdu.name = 'PARNAMES'
         h.append(hdu)
 
-        original_cube = fits.open(self.fitsfile)
-        for ext_name in ['vor', 'vorplus']:
-            if ext_name in original_cube:
-                h.append(original_cube[ext_name])
+        try:
+            original_cube = fits.open(self.fitsfile)
+            for ext_name in ['vor', 'vorplus']:
+                if ext_name in original_cube:
+                    h.append(original_cube[ext_name])
+            original_cube.close()
+        except FileNotFoundError:
+            print('ERROR:', self.fitsfile, 'not found. Extensions with',
+                  'Voronoi tables were not added to linefit output file.')
 
         h.writeto(outimage, overwrite=args['overwrite'])
-        original_cube.close()
 
     def _load_nonlinear_wl(self, wl, data, redshift=0, variance=None, 
                           flags=None, stellar=None, header=None,
@@ -1207,7 +1221,10 @@ class Cube:
         if not hasattr(self, 'header'):
             self.header = fit_file[0].header
 
-        self.fit_wavelength = spectools.get_wl(fname, pix0key='crpix3', wl0key='crval3', dwlkey='cd3_3', hdrext=1,
+        try:
+            self.fit_wavelength = fit_file['FITWL'].data
+        except KeyError:
+            self.fit_wavelength = spectools.get_wl(fname, pix0key='crpix3', wl0key='crval3', dwlkey='cd3_3', hdrext=1,
                                                dataext=1)
 
         if 'fitconfig' not in fit_file:
