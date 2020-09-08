@@ -1058,7 +1058,8 @@ class Cube:
             if individual_spec == 'peak':
                 xy = [cubetools.peak_spaxel(self.data[fw_mask])[::-1]]
             elif individual_spec == 'cofm':
-                xy = [[int(np.round(i, 0)) for i in center_of_mass(self.data[fw_mask].sum(axis=0))]]
+                center = center_of_mass(np.nansum(self.data[fw_mask], axis=0))
+                xy = [[int(np.round(i, 0)) for i in center]]
             else:
                 xy = [individual_spec[::-1]]
             if verbose:
@@ -1069,7 +1070,9 @@ class Cube:
             if spiral_center == 'peak':
                 spiral_center = cubetools.peak_spaxel(self.data[fw_mask])
             elif spiral_center == 'cofm':
-                spiral_center = [int(np.round(i, 0)) for i in center_of_mass(self.data[fw_mask].sum(axis=0))]
+                center = center_of_mass(np.nansum(self.data[fw_mask], axis=0))
+                xy = [[int(np.round(i, 0)) for i in center]]
+                spiral_center = [int(np.round(i, 0)) for i in center]
             if verbose:
                 print(spiral_center)
             xy = self._spiral(xy, spiral_center=spiral_center)
